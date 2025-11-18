@@ -1,0 +1,46 @@
+name: Sync with ComfyUI-Manager (Every 10 min)
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNC_TOKEN }}
+          persist-credentials: false
+
+      - name: Set git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Smart Sync (Keep my files)
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          git remote add upstream https://github.com/Comfy-Org/ComfyUI-Manager.git || true
+          git fetch upstream --quiet
+          git checkout main
+
+          if git rebase upstream/main -X ours; then
+            echo "Normal rebase success"
+          else
+            echo "First time sync, using --allow-unrelated-histories"
+            git rebase --abort || true
+            git rebase --allow-unrelated-histories upstream/main -X ours
+          fi
+
+          git push https://x-access-token:${SYNC_TOKEN}@github.com/${{ github.repository }}.git main --force --quiet
+
+          echo "Sync success"
+          echo "time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+      - name: Summary
+        if: always()
+        run: echo "Sync job finished at $(date '+%Y-%m-%d %H:%M:%S %Z')"
